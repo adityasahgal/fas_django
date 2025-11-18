@@ -1,89 +1,52 @@
-# from deepface import DeepFace
-# import cv2
-# import os
-
-# def recognize_face_from_image(image_path):
-#     """Recognize face from image file path"""
-#     try:
-#         # Check if file exists
-#         if not os.path.exists(image_path):
-#             print(f"❌ File not found: {image_path}")
-#             return None
-
-#         # Try reading the image
-#         img = cv2.imread(image_path)
-#         if img is None:
-#             print(f"❌ OpenCV failed to read image: {image_path}")
-#             return None
-
-#         # Run DeepFace recognition
-#         result = DeepFace.find(
-#             img_path=image_path,
-#             db_path="images",
-#             enforce_detection=False,
-#             silent=True
-#         )
-
-#         # DeepFace result handling
-#         if isinstance(result, list) and len(result) > 0 and not result[0].empty:
-#             matched_name = os.path.basename(result[0].iloc[0]['identity']).split(".")[0]
-#             print(f"✅ Recognized as: {matched_name}")
-#             return matched_name
-#         else:
-#             print("😕 No face match found.")
-#             return None
-
-#     except Exception as e:
-#         print("Face recognition error:", e)
-#         return None
-
-# def recognize_face_from_frame(frame):
-#     """Recognize face from OpenCV frame"""
-#     try:
-#         # Save frame temporarily
-#         temp_path = "temp_frame.jpg"
-#         cv2.imwrite(temp_path, frame)
-        
-#         # Use existing function
-#         result = recognize_face_from_image(temp_path)
-        
-#         # Clean up
-#         if os.path.exists(temp_path):
-#             os.remove(temp_path)
-            
-#         return result
-        
-#     except Exception as e:
-#         print("Frame recognition error:", e)
-#         return None
-
-
 import cv2
+import os
+from deepface import DeepFace
 from attendance.models import Student, Attendance
 
+# Student images folder
+DATABASE_PATH = "media/students/photos"
+
 def start_face_detection():
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # 0 = Laptop camera / Replace with IP camera URL if needed
+    cap = cv2.VideoCapture(0)
+
+    print("📷 Camera Started... Looking for face...")
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        # TODO: Replace with your real face recognition code
-        # For testing, yeh assume ki after 5 sec mark attendance hogi.
+        try:
+            result = DeepFace.find(
+                img_path=frame,
+                db_path=DATABASE_PATH,
+                enforce_detection=False
+            )
 
-        cv2.imshow("Attendance Camera", frame)
+            if isinstance(result, list) and len(result) > 0 and not result[0].empty:
+                matched_file = os.path.basename(result[0].iloc[0]['identity'])
+                matched_name = matched_file.split(".")[0]
 
-        key = cv2.waitKey(1)
+                print("🎉 Face Recognized:", matched_name)
 
-        if key == ord('q'):  # quit
+                # DB search
+                student = Student.objects.filter(name__icontains=matched_name).first()
+                
+                if student:
+                    # Check if already marked today
+                    if not Attendance.objects.filter(student=student).exists():
+                        Attendance.objects.create(student=student, status="present", source="AI")
+                        print("✔ Attendance Marked for:", student.name)
+                    else:
+                        print("⏳ Already Marked Today.")
+
+        except Exception as e:
+            print("⚠ Face recognition error:", e)
+
+        cv2.imshow("Scanner", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
-        if key == ord('s'):  # simulate student detection
-            student = Student.objects.first()
-            if student:
-                Attendance.objects.create(student=student, status='present', source='frontend')
-                print(f"Attendance Marked For {student.name}")
 
     cap.release()
     cv2.destroyAllWindows()
