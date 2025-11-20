@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Dashboard</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f3f3f3; }
+        .cam-box {
+            width: 45%; background: white; padding: 10px; 
+            margin: 10px; float: left; box-shadow: 0 0 10px #aaa;
+        }
+        .status {
+            font-weight: bold; padding: 5px 10px; border-radius: 5px;
+        }
+        .ok { background: #c8f7c5; color: #1e7c1e; }
+        .error { background: #ffd0d0; color: #9b1111; }
+        .btn {
+            padding: 12px 20px; cursor: pointer; background: #007bff; 
+            color: white; border: none; border-radius: 5px; font-size: 16px;
+        }
+    </style>
+
+    <script>
+        async function startDetection() {
+
+            // STEP 1 → Start HLS Streams
+            let s1 = await fetch("/run-face/")
+                          .then(r => r.json())
+                          .catch(() => ({message: "Failed to start camera stream"}));
+
+            // STEP 2 → Wait for ffmpeg to create .m3u8 files
+            await new Promise(res => setTimeout(res, 2000));
+
+            // STEP 3 → Start face detection in background
+            let s2 = await fetch("/start-detection/")
+                          .then(r => r.text())
+                          .catch(() => "Failed to start detection");
+
+            alert("✔ Streams Started\n✔ Face Detection Started");
+            
+            // STEP 4 → Load live video now
+            loadStream("cam1", "/media/streams/cam1.m3u8?v=" + Date.now());
+            loadStream("cam2", "/media/streams/cam2.m3u8?v=" + Date.now());
+        }
+    </script>
+</head>
+
+<body>
+
+    <h1>📸 AI Face Attendance Dashboard</h1>
+
+    <button class="btn" onclick="startDetection()">▶ Start Attendance Detection</button>
+
+    <br><br>
+
+    <!-- <div class="cam-box">
+        <h3>Camera 1 (IP)</h3>
+        <video id="cam1" width="100%" controls autoplay muted></video>
+    </div>
+
+    <div class="cam-box">
+        <h3>Camera 2 (IP)</h3>
+        <video id="cam2" width="100%" controls autoplay muted></video>
+    </div> -->
+
+<!-- <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+function loadStream(videoId, url){
+    var video = document.getElementById(videoId);
+
+    if(Hls.isSupported()){
+        var hls = new Hls({
+            lowLatencyMode: true,
+            backBufferLength: 0
+        });
+        hls.loadSource(url);
+        hls.attachMedia(video);
+    } else if(video.canPlayType("application/vnd.apple.mpegurl")){
+        video.src = url;
+    }
+}
+</script> -->
+
+</body>
+</html>

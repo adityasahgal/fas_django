@@ -2,12 +2,16 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Student, Attendance
 from django import forms
-from django.http import JsonResponse
-from attendance.detect import start_face_detection
+from django.http import JsonResponse, HttpResponse
+# from attendance.detect import start_face_detection
 
 from django.http import StreamingHttpResponse
 from django.shortcuts import render
 import cv2
+from attendance.detect import start_face_detection_parallel
+import threading
+
+
 
 def index(request):
     return render(request, "camera.html")
@@ -60,6 +64,28 @@ def attendance_list(request):
     qs = Attendance.objects.select_related('student').all()[:200]
     return render(request, 'attendance/attendance_list.html', {'attendances': qs})
 
+
+from attendance.streamer import start_hls_stream
+CAM1 = "rtsp://admin:Admin%40123@192.168.1.250:554/cam/realmonitor?channel=1&subtype=0"
+CAM2 = "rtsp://admin:Admin%40123@192.168.1.251:554/cam/realmonitor?channel=1&subtype=0"
+
+# import threading
+
 def run_camera(request):
-    start_face_detection()
-    return JsonResponse({"message": "Camera Closed — Attendance Updated"})
+    t1 = threading.Thread(target=start_hls_stream, args=(CAM1, "cam1"))
+    t2 = threading.Thread(target=start_hls_stream, args=(CAM2, "cam2"))
+
+    t1.start()
+    t2.start()
+
+    return JsonResponse({"message": "IP Camera Streams Started"})
+
+
+def start_detection(request):
+    start_face_detection_parallel()
+    return HttpResponse("🔥 Face detection started on both cameras")
+
+def dashboard(request):
+    return render(request, "attendance/dashboard.html")
+
+

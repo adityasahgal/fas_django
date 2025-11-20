@@ -12,6 +12,8 @@ urlpatterns = [
 
 
     path('run-face/', views.run_camera, name='run_camera'),
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path("start-detection/", views.start_detection, name="start_detection"),
 
     path("", views.index),
     path("video_feed", views.video_feed),
