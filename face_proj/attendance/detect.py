@@ -5,6 +5,7 @@ import numpy as np
 from deepface import DeepFace
 from attendance.models import Student, Attendance
 from django.utils.timezone import now
+from datetime import timedelta
 
 DATABASE_PATH = "media/students/photos"
 
@@ -23,10 +24,18 @@ def mark_attendance(matched_name, camera_name):
         print(f"❌ Student not found: {matched_name}")
         return
 
-    today = now().date()
+    # today = now().date()
 
-    if Attendance.objects.filter(student=student, timestamp__date=today).exists():
-        print(f"⏳ Already marked today → {student.name}")
+    # if Attendance.objects.filter(student=student, timestamp__date=today).exists():
+    #     print(f"⏳ Already marked today → {student.name}")
+    #     return
+    
+    ten_minutes_ago = now() - timedelta(minutes=10)
+
+    # Check if student already marked attendance within last 10 minutes
+    if Attendance.objects.filter(student=student,
+                                 timestamp__gte=ten_minutes_ago).exists():
+        print(f"⏳ Already marked within 10 minutes → {student.name}")
         return
 
     Attendance.objects.create(
