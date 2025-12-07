@@ -30,7 +30,11 @@ def mark_attendance(matched_name, camera_name):
     #     print(f"⏳ Already marked today → {student.name}")
     #     return
     
+<<<<<<< HEAD
     ten_minutes_ago = now() - timedelta(minutes=10)
+=======
+    ten_minutes_ago = now() - timedelta(minutes=45)
+>>>>>>> db5e040 (Upadte Models with its Relation)
 
     # Check if student already marked attendance within last 10 minutes
     if Attendance.objects.filter(student=student,

@@ -4,7 +4,9 @@ import os, subprocess
 OUTPUT_DIR = os.path.join(settings.BASE_DIR, "media", "streams")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-FFMPEG_PATH = r"C:\ffmpeg\bin\ffmpeg.exe"
+# FFMPEG_PATH = r"C:\ffmpeg\bin\ffmpeg.exe"
+FFMPEG_PATH = r"C:\Users\Office Point\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.0-essentials_build\bin\ffmpeg.exe"
+
 
 def start_hls_stream(camera_url, output_name):
     output_path = os.path.join(OUTPUT_DIR, f"{output_name}.m3u8")

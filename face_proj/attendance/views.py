@@ -1,9 +1,7 @@
-# attendance/views.py
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Student, Attendance
 from django import forms
 from django.http import JsonResponse, HttpResponse
-# from attendance.detect import start_face_detection
 
 from django.http import StreamingHttpResponse
 from django.shortcuts import render
@@ -17,14 +15,14 @@ def index(request):
     return render(request, "camera.html")
 
 def gen_frames():
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Windows Fix
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  
 
     while True:
         success, frame = cap.read()
         if not success:
             break
 
-        # Draw rectangle example (later replace with recognition)
+        
         cv2.putText(frame, "Camera Working", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
 
         _, buffer = cv2.imencode(".jpg", frame)
@@ -68,8 +66,6 @@ def attendance_list(request):
 from attendance.streamer import start_hls_stream
 CAM1 = "rtsp://admin:Admin%40123@192.168.1.250:554/cam/realmonitor?channel=1&subtype=0"
 CAM2 = "rtsp://admin:Admin%40123@192.168.1.251:554/cam/realmonitor?channel=1&subtype=0"
-
-# import threading
 
 def run_camera(request):
     t1 = threading.Thread(target=start_hls_stream, args=(CAM1, "cam1"))
