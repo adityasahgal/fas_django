@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'attendance',
-    # 'rest_framework',  # uncomment if using DRF
+    'rest_framework', 
 ]
 
 MIDDLEWARE = [
