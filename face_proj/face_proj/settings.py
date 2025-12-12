@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     'attendance',
     'rest_framework', 
+    'import_export',
 ]
 
 MIDDLEWARE = [
