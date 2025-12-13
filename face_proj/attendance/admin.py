@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Course, Section, Semester, Student, Attendance, College, Program, Teacher, TeacherAttendance, Year
+from .models import Course, Lecture, Section, Semester, Student, Attendance, College, Program, Subject, Teacher, TeacherAttendance, Year
 from import_export.admin import ImportExportModelAdmin
 from .resources import StudentResource, AttendanceResource, CollegeResource
 
@@ -18,25 +18,50 @@ class YearAdmin(admin.ModelAdmin):
     list_display = ('year_id', 'program', 'year_number')
     search_fields = ('program__name',)
 
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ('course_id', 'code', 'title', 'program')
+    search_fields = ('code', 'title', 'program__name')
 @admin.register(Semester)
 class SemesterAdmin(admin.ModelAdmin):
     list_display = ('semester_id', 'year', 'name')
     search_fields = ('year__program__name',)
 
-@admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
-    list_display = ('course_id', 'code', 'title', 'program')
-    search_fields = ('code', 'title', 'program__name')
+
+@admin.register(Subject)
+class SubjectAdmin(admin.ModelAdmin):
+    list_display = ('subject_id', 'name', 'get_program', 'course')
+    search_fields = ('name', 'course__program__name', 'course__code')
+
+    def get_program(self, obj):
+        return obj.course.program.name
+    get_program.short_description = "Program"
+
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
     list_display = ('section_id', 'course', 'semester', 'section_number', 'instructor')
     search_fields = ('course__code', 'semester__name', 'section_number', 'instructor')
 
+# @admin.register(Teacher)
+# class TeacherAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+#     list_display = ('teacher_id', 'first_name', 'last_name', 'email', 'phone')
+#     search_fields = ('name', 'email', 'phone')
+
 @admin.register(Teacher)
-class TeacherAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('teacher_id', 'first_name', 'last_name', 'email', 'phone')
-    search_fields = ('name', 'email', 'phone')
+class TeacherAdmin(admin.ModelAdmin):
+    list_display = ('teacher_id', 'first_name', 'last_name', 'get_courses', 'get_subjects')
+
+    def get_courses(self, obj):
+        courses = obj.sections.values_list('course__title', flat=True).distinct()
+        return ", ".join(courses)
+    get_courses.short_description = "Courses"
+
+    def get_subjects(self, obj):
+        subjects = obj.sections.values_list('subject__name', flat=True).distinct()
+        return ", ".join(subjects)
+    get_subjects.short_description = "Subjects"
+
     
 @admin.register(Student)
 class StudentAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -47,12 +72,17 @@ class StudentAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 @admin.register(Attendance)
 class AttendanceAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     resource_class = AttendanceResource
-    list_display = ('id', 'student', 'status', 'source', 'timestamp')
+    list_display = ('id', 'student', 'lecture', 'status', 'source', 'timestamp')
     list_filter = ('status', 'source', 'timestamp')
     search_fields = ('student__name',)
 
 @admin.register(TeacherAttendance)
 class TeacherAttendanceAdmin(admin.ModelAdmin):
-    list_display = ('id', 'teacher', 'status', 'source', 'timestamp')
+    list_display = ('id', 'teacher__first_name', 'teacher__last_name', 'status', 'source', 'timestamp')
     list_filter = ('status', 'source', 'timestamp')
-    search_fields = ('teacher__first_name', 'teacher__last_name')           
+    search_fields = ('teacher__first_name', 'teacher__last_name')  
+
+@admin.register(Lecture)
+class LectureAdmin(admin.ModelAdmin):
+    list_display = ('lecture_id', 'section', 'date', 'time', 'teacher', 'topic', 'is_verified', 'verified_at')
+    search_fields = ('section__course__code', 'teacher__first_name', 'teacher__last_name')     

@@ -22,6 +22,5 @@ urlpatterns = [
     path('mark-attendance/', mark_attendance_api),
     path('attendance/', attendance_list),
 
-
 ]
  

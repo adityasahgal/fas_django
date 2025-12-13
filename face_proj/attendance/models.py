@@ -19,7 +19,6 @@ class College(models.Model):
 
     def _str_(self):
         return self.name
-
 class Program(models.Model):
     program_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     college = models.ForeignKey(College, on_delete=models.CASCADE, related_name="programs")
@@ -28,8 +27,6 @@ class Program(models.Model):
 
     def __str__(self):
         return self.name
-
-
 class Year(models.Model):
     year_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name="years")
@@ -41,8 +38,6 @@ class Year(models.Model):
 
     def __str__(self):
         return f"{self.program.name} - Year {self.year_number}"
-
-
 class Semester(models.Model):
     semester_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     year = models.ForeignKey(Year, on_delete=models.CASCADE, related_name="semesters")
@@ -62,7 +57,6 @@ class Semester(models.Model):
     def __str__(self):
         return f"{self.year} - {self.get_name_display()}"
 
-
 class Course(models.Model):
     course_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name="courses")
@@ -76,7 +70,6 @@ class Course(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.title}"
-
 
 # class Section(models.Model):
 #     section_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
@@ -100,6 +93,13 @@ class Section(models.Model):
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name="sections")
     section_number = models.CharField(max_length=10)  # A, B, C, etc.
 
+    subject = models.ForeignKey(
+        "Subject",
+        on_delete=models.CASCADE,
+        related_name="sections",
+        null=True, blank=True
+    )
+
     instructor = models.ForeignKey(
         "Teacher",
         on_delete=models.SET_NULL,
@@ -117,8 +117,6 @@ class Section(models.Model):
 
     def __str__(self):
         return f"{self.course.code} - Section {self.section_number} ({self.semester})"
-
-
 class Teacher(models.Model):
     teacher_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     college = models.ForeignKey(College, on_delete=models.CASCADE, related_name="teachers")
@@ -135,9 +133,15 @@ class Teacher(models.Model):
 
     def _str_(self):
         return f"{self.first_name} {self.last_name}"
-
 class TeacherAttendance(models.Model):
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='attendances')
+    lecture = models.ForeignKey(
+        "Lecture",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="teacher_attendances"
+    )
     timestamp = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=(('present','Present'),('absent','Absent')), default='present')
     source = models.CharField(max_length=100, blank=True, null=True)
@@ -148,8 +152,6 @@ class TeacherAttendance(models.Model):
 
     def __str__(self):
         return f"{self.teacher.first_name} {self.teacher.last_name} - {self.timestamp:%Y-%m-%d %H:%M:%S}"
-
-
 class Camera(models.Model):
     camera_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     college = models.ForeignKey(College, on_delete=models.CASCADE, related_name="cameras")
@@ -182,16 +184,29 @@ class Camera(models.Model):
 
     def _str_(self):
         return f"{self.location} ({self.ip_address})"
+class Subject(models.Model):
+    subject_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="subjects")
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
 
+    def __str__(self):
+        return f"{self.course.code} - {self.name}"
 
 class Student(models.Model):
     name = models.CharField(max_length=200)
     roll_no = models.CharField(max_length=50, unique=True)
-    # course = models.CharField(max_length=100, blank=True, null=True)
     course = models.ForeignKey(
         "Course", 
         on_delete=models.SET_NULL,
         null=True, 
+        blank=True,
+        related_name="students"
+    )
+    section = models.ForeignKey(
+        Section,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name="students"
     )
@@ -201,13 +216,12 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.roll_no})"
-
-
 class Attendance(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendances')
+    lecture = models.ForeignKey("Lecture", on_delete=models.CASCADE, null=True, blank=True, related_name="attendances")
     timestamp = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=(('present','Present'),('absent','Absent')), default='present')
-    source = models.CharField(max_length=100, blank=True, null=True)  # e.g., "camera1" or "manual"
+    source = models.CharField(max_length=100, blank=True, null=True)
     note = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -216,3 +230,38 @@ class Attendance(models.Model):
     def __str__(self):
         return f"{self.student} - {self.timestamp:%Y-%m-%d %H:%M:%S}"
 
+class Lecture(models.Model):
+    lecture_id = models.CharField(
+        primary_key=True,
+        max_length=8,
+        default=generate_custom_id,
+        editable=False,
+        unique=True
+    )
+
+    section = models.ForeignKey(
+        Section,
+        on_delete=models.CASCADE,
+        related_name="lectures"
+    )
+
+    teacher = models.ForeignKey(
+        Teacher,
+        on_delete=models.CASCADE,
+        related_name="lectures"
+    )
+
+    date = models.DateField()
+    time = models.TimeField()
+
+    topic = models.CharField(max_length=255, blank=True, null=True)
+
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('section', 'date', 'time')
+        ordering = ['-date', '-time']
+
+    def __str__(self):
+        return f"{self.section} - {self.date} {self.time}"
