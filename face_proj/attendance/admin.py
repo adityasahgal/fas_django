@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Course, Lecture, Section, Semester, Student, Attendance, College, Program, Subject, Teacher, TeacherAttendance, Year
+from .models import Course, Lecture, Section, Semester, Student, Attendance, College, Program, Subject, Teacher, TeacherAttendance, Year, Camera
 from import_export.admin import ImportExportModelAdmin
 from .resources import StudentResource, AttendanceResource, CollegeResource
 
@@ -43,10 +43,6 @@ class SectionAdmin(admin.ModelAdmin):
     list_display = ('section_id', 'course', 'semester', 'section_number', 'instructor')
     search_fields = ('course__code', 'semester__name', 'section_number', 'instructor')
 
-# @admin.register(Teacher)
-# class TeacherAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-#     list_display = ('teacher_id', 'first_name', 'last_name', 'email', 'phone')
-#     search_fields = ('name', 'email', 'phone')
 
 @admin.register(Teacher)
 class TeacherAdmin(admin.ModelAdmin):
@@ -85,4 +81,40 @@ class TeacherAttendanceAdmin(admin.ModelAdmin):
 @admin.register(Lecture)
 class LectureAdmin(admin.ModelAdmin):
     list_display = ('lecture_id', 'section', 'date', 'time', 'teacher', 'topic', 'is_verified', 'verified_at')
-    search_fields = ('section__course__code', 'teacher__first_name', 'teacher__last_name')     
+    search_fields = ('section__course__code', 'teacher__first_name', 'teacher__last_name')  
+
+@admin.register(Camera)
+class CameraAdmin(admin.ModelAdmin):
+    list_display = (
+        'camera_id',
+        'location',
+        'ip_address',
+        'rtsp_port',
+        'is_online',
+        'last_checked'
+    )
+
+    list_filter = ('is_online', 'supports_ptz', 'college')
+    search_fields = ('camera_id', 'location', 'ip_address')
+    readonly_fields = ('camera_id',)
+
+    fieldsets = (
+        ("Basic Info", {
+            "fields": ("camera_id", "college", "location", "description")
+        }),
+        ("Network Configuration", {
+            "fields": ("ip_address", "port", "rtsp_port")
+        }),
+        ("Authentication", {
+            "fields": ("username", "password")
+        }),
+        ("Stream URLs", {
+            "fields": ("rtsp_url", "snapshot_url")
+        }),
+        ("Camera Details", {
+            "fields": ("model_number", "firmware_version", "supports_ptz")
+        }),
+        ("Status", {
+            "fields": ("is_online", "last_checked")
+        }),
+    )

@@ -17,7 +17,7 @@ class College(models.Model):
     zip_code = models.CharField(max_length=10)
     country = models.CharField(max_length=100)
 
-    def _str_(self):
+    def __str__(self):
         return self.name
 class Program(models.Model):
     program_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
@@ -90,6 +90,7 @@ class Course(models.Model):
 class Section(models.Model):
     section_id = models.CharField(primary_key=True, max_length=8, unique=True, editable=False, default=generate_custom_id)
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="sections")
+    
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE, related_name="sections")
     section_number = models.CharField(max_length=10)  # A, B, C, etc.
 
@@ -131,7 +132,7 @@ class Teacher(models.Model):
     zip_code = models.CharField(max_length=10)
     country = models.CharField(max_length=100)
 
-    def _str_(self):
+    def __str__(self):
         return f"{self.first_name} {self.last_name}"
 class TeacherAttendance(models.Model):
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='attendances')
