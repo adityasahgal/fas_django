@@ -1,178 +1,239 @@
 import cv2
 import os
 import threading
-import numpy as np
+from datetime import datetime, date, time, timedelta
+
 from deepface import DeepFace
-from attendance.models import Student, Attendance, Teacher, TeacherAttendance, Lecture
-from django.utils.timezone import now
-from datetime import timedelta
-
-DATABASE_PATH = "media/students/photos"
-
-CAM1 = "rtsp://admin:Admin%40123@192.168.1.250:554/cam/realmonitor?channel=1&subtype=0"
-CAM2 = "rtsp://admin:Admin%40123@192.168.1.251:554/cam/realmonitor?channel=1&subtype=0"
-
-
 from django.db import close_old_connections
+from django.utils.timezone import localtime, make_aware
 
-from datetime import time
+from attendance.models import Student, Teacher, Attendance
 
-def get_current_lecture_for_student(student):
-    now_time = now().time()
-    today = now().date()
+# =====================================================
+# DATABASE PATHS
+# =====================================================
+STUDENT_DB = "media/students/photos"
+TEACHER_DB = "media/teachers/photos"
 
-    return Lecture.objects.filter(
-        section=student.section,
-        date=today,
-        time__lte=now_time
-    ).order_by('-time').first()
+# =====================================================
+# CP PLUS RTSP (SUB STREAM)
+# =====================================================
+CAM1 = "rtsp://admin:Admin%40123@192.168.1.250:554/cam/realmonitor?channel=1&subtype=1"
+CAM2 = "rtsp://admin:Admin%40123@192.168.1.251:554/cam/realmonitor?channel=1&subtype=1"
 
-def get_current_lecture(teacher):
-    now_time = now().time()
-    today = now().date()
+# =====================================================
+# LECTURE CONFIG
+# =====================================================
+LECTURE_START_TIME = time(0, 0)
+LECTURE_END_TIME   = time(23, 59)
+LECTURE_DURATION   = 45  # minutes
 
-    return Lecture.objects.filter(
-        teacher=teacher,
-        date=today,
-        time__lte=now_time
-    ).order_by('-time').first()
+# =====================================================
+# FACE MATCH THRESHOLDS
+# =====================================================
+STUDENT_THRESHOLD = 0.35
+TEACHER_THRESHOLD = 0.35
+
+# =====================================================
+# LIVE MESSAGE
+# =====================================================
+last_message = ""
+last_message_time = None
+MESSAGE_DURATION = 3
+message_lock = threading.Lock()
+
+# =====================================================
+# GLOBAL ARC FACE MODEL (LOAD ONCE)
+# =====================================================
+arcface_model = None
+model_lock = threading.Lock()
 
 
-def mark_student_attendance(student, camera_name):
-    from django.utils.timezone import now
-    today = now().date()
-    
-    if not student.section:
-        print(f"❌ Student {student.roll_no} has no section assigned")
+def load_arcface_once():
+    global arcface_model
+    with model_lock:
+        if arcface_model is None:
+            print("✅ Loading ArcFace model (ONE TIME)...")
+            arcface_model = DeepFace.build_model("ArcFace")
+
+
+# =====================================================
+def get_current_lecture_slot():
+    current = localtime()
+    today = current.date()
+
+    start_dt = make_aware(datetime.combine(today, LECTURE_START_TIME))
+    end_dt   = make_aware(datetime.combine(today, LECTURE_END_TIME))
+
+    if current < start_dt or current >= end_dt:
+        return None
+
+    elapsed = int((current - start_dt).total_seconds() // 60)
+    lecture_no = (elapsed // LECTURE_DURATION) + 1
+
+    lecture_start = start_dt + timedelta(minutes=(lecture_no - 1) * LECTURE_DURATION)
+    lecture_end   = lecture_start + timedelta(minutes=LECTURE_DURATION)
+
+    return {
+        "lecture_no": lecture_no,
+        "start": lecture_start.time(),
+        "end": lecture_end.time(),
+    }
+
+
+# =====================================================
+def mark_attendance(person, user_type, camera_name):
+    global last_message, last_message_time
+    close_old_connections()
+
+    slot = get_current_lecture_slot()
+    if not slot:
         return
 
-    lecture = Lecture.objects.filter(section=student.section, date=today).order_by('-time').first()
-    if not lecture:
-        print("❌ No lecture found for section today")
-        return
+    today = date.today()
+    lecture_no = slot["lecture_no"]
 
-    # Check if attendance already marked
-    attendance, created = Attendance.objects.get_or_create(
-        student=student,
-        lecture=lecture,
-        defaults={'status': 'present', 'source': camera_name}
-    )
-
-    if created:
-        print(f"✅ Attendance marked for {student.name} ({student.roll_no})")
-    else:
-        print(f"⚠️ Attendance already marked for {student.name} ({student.roll_no})")
-
-
-def mark_teacher_attendance(teacher, camera_name):
-    ten_minutes_ago = now() - timedelta(minutes=45)
-
-    if TeacherAttendance.objects.filter(
-        teacher=teacher,
-        timestamp__gte=ten_minutes_ago
+    if Attendance.objects.filter(
+        uid=person.uid,
+        type=user_type,
+        date=today,
+        lecture_no=lecture_no
     ).exists():
-        print(f"⏳ Teacher already marked recently → {teacher.first_name}")
         return
 
-    lecture = get_current_lecture(teacher)
-    TeacherAttendance.objects.create(
-        teacher=teacher,
+    Attendance.objects.create(
+        type=user_type,
+        uid=person.uid,
+        name=person.name,
+        lecture_no=lecture_no,
+        date=today,
+        start_time=slot["start"],
+        end_time=slot["end"],
         status="present",
-        lecture=lecture,
-        source=f"AI-{camera_name}"
+        source=camera_name,
+        note="CP Plus AI Face Match"
     )
-    print(f"✔ Teacher Marked: {teacher.first_name} {teacher.last_name} ({camera_name})")
+
+    with message_lock:
+        last_message = f"{user_type.upper()} MATCHED: {person.name} | Lecture {lecture_no}"
+        last_message_time = datetime.now()
+
+    print("✅ ATTENDANCE MARKED:", last_message)
 
 
-
+# =====================================================
 def process_camera(camera_url, camera_name):
-    print(f"📡 Opening {camera_name}...")
+    close_old_connections()
+    print(f"\n📡 Opening {camera_name}")
+
+    load_arcface_once()  # SAFE CALL
+
     cap = cv2.VideoCapture(camera_url, cv2.CAP_FFMPEG)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
 
     if not cap.isOpened():
-        print(f"❌ Can't open: {camera_name}")
+        print("❌ Camera not opened:", camera_name)
         return
 
-    frame_skip = 0
+    frame_no = 0
 
     while True:
         ret, frame = cap.read()
-        if not ret:
-            print(f"⚠ No frame from {camera_name}")
+        if not ret or frame is None:
+            continue
+
+        frame_no += 1
+        frame = cv2.resize(frame, (640, 480))
+
+        # LIVE MESSAGE
+        msg = "Detecting face..."
+        with message_lock:
+            if last_message and last_message_time:
+                if (datetime.now() - last_message_time).seconds <= MESSAGE_DURATION:
+                    msg = last_message
+
+        cv2.putText(frame, msg, (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+        cv2.imshow(camera_name, frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-        frame_skip += 1
-        if frame_skip % 15 != 0:
+        if frame_no % 20 != 0:
+            continue
+
+        if not get_current_lecture_slot():
             continue
 
         try:
-            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
-
-            # Encode frame to memory (avoids writing temp file)
-            _, img_encoded = cv2.imencode('.jpg', small_frame)
-            img_bytes = img_encoded.tobytes()
-
-            img_array = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
-
-            result_student = DeepFace.find(
-                img_path=img_array,
-                db_path="media/students/photos",
+            faces = DeepFace.extract_faces(
+                img_path=frame,
+                detector_backend="opencv",
                 enforce_detection=False
             )
 
-            result_teacher = DeepFace.find(
-                img_path=img_array,
-                db_path="media/teachers/photos",
-                enforce_detection=False
-            )
+            for f in faces:
+                face_img = f["face"]
 
-            if isinstance(result_student, list) and len(result_student) > 0 and not result_student[0].empty:
-                matched_file = os.path.basename(result_student[0].iloc[0]['identity'])
-                matched_roll = os.path.splitext(matched_file)[0].split("_")[0]
+                # ================= STUDENT =================
+                students = DeepFace.find(
+                    img_path=face_img,
+                    db_path=STUDENT_DB,
+                    model_name="ArcFace",
+                    detector_backend="opencv",
+                    distance_metric="cosine",
+                    enforce_detection=False,
+                    silent=True
+                )
 
-                print(f"🎯 Student Match on {camera_name}: {matched_roll}")
+                if students and not students[0].empty:
+                    best = students[0].iloc[0]
+                    if best["distance"] < STUDENT_THRESHOLD:
+                        uid = os.path.splitext(os.path.basename(best["identity"]))[0]
+                        student = Student.objects.filter(uid=uid).first()
+                        if student:
+                            mark_attendance(student, "student", camera_name)
+                            break
 
-                student = Student.objects.filter(roll_no__iexact=matched_roll).first()
-                if student:
-                    mark_student_attendance(student, camera_name)
-                else:
-                    print("❌ Student not found in DB")
+                # ================= TEACHER =================
+                teachers = DeepFace.find(
+                    img_path=face_img,
+                    db_path=TEACHER_DB,
+                    model_name="ArcFace",
+                    detector_backend="opencv",
+                    distance_metric="cosine",
+                    enforce_detection=False,
+                    silent=True
+                )
 
-                continue
- 
-
-            if isinstance(result_teacher, list) and len(result_teacher) > 0 and not result_teacher[0].empty:
-                matched_file = os.path.basename(result_teacher[0].iloc[0]['identity'])
-                name_part = os.path.splitext(matched_file)[0]
-
-                first_name = name_part.split("_")[0]   # ✅ Abhishek
-
-                print(f"🎯 Teacher Match on {camera_name}: {first_name}")
-
-                teacher = Teacher.objects.filter(first_name__iexact=first_name).first()
-                if teacher:
-                    mark_teacher_attendance(teacher, camera_name)
-                else:
-                    print("❌ Teacher not found in DB")
-
+                if teachers and not teachers[0].empty:
+                    best = teachers[0].iloc[0]
+                    if best["distance"] < TEACHER_THRESHOLD:
+                        name = os.path.splitext(os.path.basename(best["identity"]))[0]
+                        teacher = Teacher.objects.filter(name__iexact=name).first()
+                        if teacher:
+                            mark_attendance(teacher, "teacher", camera_name)
+                            break
 
         except Exception as e:
-            print(f"⚠ Error {camera_name}: {e}")
-
-        if cv2.waitKey(1) == ord('q'):
-            break
+            print("❌ Detection Error:", e)
 
     cap.release()
-    print(f"🛑 Stopped {camera_name}")
+    cv2.destroyAllWindows()
 
 
+# =====================================================
 def start_face_detection_parallel():
-    print("🚀 Starting 2 Cameras in background...")
+    print("🚀 CP PLUS FACE ATTENDANCE SYSTEM STARTED")
 
-    t1 = threading.Thread(target=process_camera, args=(CAM1, "Camera-1"), daemon=True)
-    t2 = threading.Thread(target=process_camera, args=(CAM2, "Camera-2"), daemon=True)
+    threading.Thread(
+        target=process_camera,
+        args=(CAM1, "CPPlus-Cam-1"),
+        daemon=True
+    ).start()
 
-    t1.start()
-    t2.start()
-
-    print("✔ Both cameras running in background")
+    threading.Thread(
+        target=process_camera,
+        args=(CAM2, "CPPlus-Cam-2"),
+        daemon=True
+    ).start()

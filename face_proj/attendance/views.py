@@ -38,7 +38,7 @@ def video_feed(request):
 class StudentForm(forms.ModelForm):
     class Meta:
         model = Student
-        fields = ['name', 'roll_no', 'course', 'batch', 'photo']
+        fields = ['name', 'uid','photo']
 
 def home(request):
     recent = Attendance.objects.select_related('student').all()[:20]
